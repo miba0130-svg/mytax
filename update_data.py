@@ -25,9 +25,11 @@ import yfinance as yf
 
 # key -> {ticker: Yahoo Finance symbol, label, unit, decimals, ...}
 # "scale" (optional): multiply the raw Yahoo close by this before storing.
-#   ^TNX is quoted as 10x the actual 10-year Treasury yield (e.g. 50.0 on
-#   the ticker means 5.00%), so we store it already divided down to the
-#   real percentage.
+#   ^TNX's Close on Yahoo already IS the actual 10-year Treasury yield in
+#   percent (e.g. 5.00 means 5.00%) - verified against Treasury.gov's daily
+#   par yield curve for several dates. (An earlier version of this script
+#   assumed ^TNX was quoted as 10x the yield and divided by 10, which was
+#   wrong - it produced ~0.50 instead of ~5.00. No scaling is applied now.)
 SERIES_CONFIG = {
     "sp500":  {"ticker": "^GSPC", "label": "S&P 500",         "unit": "pt",   "decimals": 2},
     "kospi":  {"ticker": "^KS11", "label": "코스피",           "unit": "pt",   "decimals": 2},
@@ -35,7 +37,7 @@ SERIES_CONFIG = {
     "krw":    {"ticker": "KRW=X", "label": "원/달러",          "unit": "원",   "decimals": 2},
     "gold":   {"ticker": "GC=F",  "label": "금",               "unit": "$/oz", "decimals": 2},
     "us10y":  {"ticker": "^TNX",  "label": "미국 10년물 금리",  "unit": "%",    "decimals": 2,
-               "deltaUnit": "bp", "scale": 0.1},
+               "deltaUnit": "bp"},
 }
 
 PERIOD = "5y"
