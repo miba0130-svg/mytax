@@ -1,114 +1,43 @@
-#!/usr/bin/env python3
-"""
-5-year daily market data updater for the Global Market Briefing dashboard.
+name: Update market data
 
-Fetches daily closes via yfinance for the 6 series the dashboard charts
-(S&P 500, KOSPI, Nikkei 225, USD/KRW, Gold, US 10Y Treasury yield) and
-writes data.json in the schema index.html's Chart.js code expects.
+on:
+  schedule:
+    # 22:30 UTC, Mon-Fri = 07:30 KST, Tue-Sat — after the US regular
+    # session (closes ~20:00-21:00 UTC depending on DST) has finished for
+    # the day, so the daily close is already final by the time this runs.
+    # Adjust to taste; this repo's data doesn't need to be minute-fresh.
+    - cron: '30 22 * * 1-5'
+  workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
 
-Run manually:
-    pip install yfinance pandas
-    python update_data.py
+permissions:
+  contents: write # needed to commit the updated data.json back to the repo
 
-Run automatically:
-    see .github/workflows/update.yml (daily schedule + manual dispatch)
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-To add another series to the chart later: add an entry to SERIES_CONFIG
-below, add a matching key to the SERIES object in index.html, and make
-that item's card/row pass a "tap" key equal to the same dict key.
-"""
-import json
-import sys
-from datetime import datetime, timezone
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-import yfinance as yf
+      - name: Install dependencies
+        run: pip install --upgrade yfinance pandas
 
-# key -> {ticker: Yahoo Finance symbol, label, unit, decimals, ...}
-# "scale" (optional): multiply the raw Yahoo close by this before storing.
-#   ^TNX's Close on Yahoo already IS the actual 10-year Treasury yield in
-#   percent (e.g. 5.00 means 5.00%) - verified against Treasury.gov's daily
-#   par yield curve for several dates. (An earlier version of this script
-#   assumed ^TNX was quoted as 10x the yield and divided by 10, which was
-#   wrong - it produced ~0.50 instead of ~5.00. No scaling is applied now.)
-SERIES_CONFIG = {
-    "sp500":  {"ticker": "^GSPC", "label": "S&P 500",         "unit": "pt",   "decimals": 2},
-    "kospi":  {"ticker": "^KS11", "label": "코스피",           "unit": "pt",   "decimals": 2},
-    "nikkei": {"ticker": "^N225", "label": "니케이225",         "unit": "pt",   "decimals": 2},
-    "krw":    {"ticker": "KRW=X", "label": "원/달러",          "unit": "원",   "decimals": 2},
-    "gold":   {"ticker": "GC=F",  "label": "금",               "unit": "$/oz", "decimals": 2},
-    "us10y":  {"ticker": "^TNX",  "label": "미국 10년물 금리",  "unit": "%",    "decimals": 2,
-               "deltaUnit": "bp"},
-}
+      - name: Fetch 5-year daily data
+        run: python update_data.py
 
-PERIOD = "5y"
-INTERVAL = "1d"
-OUTPUT_PATH = "data.json"
-
-
-def fetch_series(key, cfg):
-    ticker = cfg["ticker"]
-    print(f"  fetching {key} ({ticker}) ...", file=sys.stderr)
-    hist = yf.Ticker(ticker).history(period=PERIOD, interval=INTERVAL, auto_adjust=False)
-    if hist.empty:
-        raise RuntimeError(f"no data returned for {ticker}")
-    hist = hist.dropna(subset=["Close"])
-    if hist.empty:
-        raise RuntimeError(f"all rows for {ticker} had no Close value")
-
-    scale = cfg.get("scale", 1.0)
-    decimals = cfg["decimals"]
-    dates = [d.strftime("%Y-%m-%d") for d in hist.index]
-    values = [round(float(v) * scale, decimals) for v in hist["Close"]]
-
-    out = {
-        "yahoo_ticker": ticker,
-        "label": cfg["label"],
-        "unit": cfg["unit"],
-        "decimals": decimals,
-        "dates": dates,
-        "values": values,
-    }
-    if "deltaUnit" in cfg:
-        out["deltaUnit"] = cfg["deltaUnit"]
-    return out
-
-
-def main():
-    series = {}
-    failures = []
-
-    for key, cfg in SERIES_CONFIG.items():
-        try:
-            series[key] = fetch_series(key, cfg)
-        except Exception as e:  # noqa: BLE001 - one bad ticker shouldn't kill the whole run
-            print(f"  WARNING: failed to fetch '{key}' ({cfg['ticker']}): {e}", file=sys.stderr)
-            failures.append(key)
-
-    if not series:
-        print("ERROR: every series failed to fetch — leaving the existing data.json untouched.", file=sys.stderr)
-        sys.exit(1)
-
-    payload = {
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": "yfinance",
-        "period": PERIOD,
-        "interval": INTERVAL,
-        "series": series,
-    }
-    if failures:
-        # index.html doesn't read this field; it's just left as a breadcrumb
-        # for whoever is debugging a partial update.
-        payload["failed_series"] = failures
-
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-
-    ok = ", ".join(sorted(series.keys()))
-    msg = f"wrote {OUTPUT_PATH} with {len(series)} series ({ok})"
-    if failures:
-        msg += f" — FAILED: {', '.join(failures)}"
-    print(msg, file=sys.stderr)
-
-
-if __name__ == "__main__":
-    main()
+      - name: Commit and push data.json if it changed
+        run: |
+          git config user.name "market-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data.json
+          if git diff --cached --quiet; then
+            echo "No changes to data.json — nothing to commit."
+          else
+            git commit -m "chore: update market data ($(date -u +%Y-%m-%d))"
+            git push
+          fi
