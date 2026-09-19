@@ -32,10 +32,12 @@ import yfinance as yf
 #   wrong - it produced ~0.50 instead of ~5.00. No scaling is applied now.)
 SERIES_CONFIG = {
     "sp500":  {"ticker": "^GSPC", "label": "S&P 500",         "unit": "pt",   "decimals": 2},
+    "nasdaq": {"ticker": "^IXIC", "label": "나스닥종합",        "unit": "pt",   "decimals": 2},
     "kospi":  {"ticker": "^KS11", "label": "코스피",           "unit": "pt",   "decimals": 2},
     "nikkei": {"ticker": "^N225", "label": "니케이225",         "unit": "pt",   "decimals": 2},
     "krw":    {"ticker": "KRW=X", "label": "원/달러",          "unit": "원",   "decimals": 2},
     "gold":   {"ticker": "GC=F",  "label": "금",               "unit": "$/oz", "decimals": 2},
+    "wti":    {"ticker": "CL=F",  "label": "WTI",              "unit": "$/bbl","decimals": 2},
     "us10y":  {"ticker": "^TNX",  "label": "미국 10년물 금리",  "unit": "%",    "decimals": 2,
                "deltaUnit": "bp"},
 }
