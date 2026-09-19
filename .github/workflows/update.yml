@@ -1,0 +1,43 @@
+name: Update market data
+
+on:
+  schedule:
+    # 22:30 UTC, Mon-Fri = 07:30 KST, Tue-Sat — after the US regular
+    # session (closes ~20:00-21:00 UTC depending on DST) has finished for
+    # the day, so the daily close is already final by the time this runs.
+    # Adjust to taste; this repo's data doesn't need to be minute-fresh.
+    - cron: '30 22 * * 1-5'
+  workflow_dispatch: {} # lets you trigger a run by hand from the Actions tab
+
+permissions:
+  contents: write # needed to commit the updated data.json back to the repo
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install --upgrade yfinance pandas
+
+      - name: Fetch 5-year daily data
+        run: python update_data.py
+
+      - name: Commit and push data.json if it changed
+        run: |
+          git config user.name "market-data-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data.json
+          if git diff --cached --quiet; then
+            echo "No changes to data.json — nothing to commit."
+          else
+            git commit -m "chore: update market data ($(date -u +%Y-%m-%d))"
+            git push
+          fi
