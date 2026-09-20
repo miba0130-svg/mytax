@@ -15,6 +15,11 @@ permissions:
 jobs:
   update-data:
     runs-on: ubuntu-latest
+    # brazil10y backfills a batch of ANBIMA requests each run (one HTTP
+    # call per calendar day, capped at BRAZIL10Y_MAX_NEW_DAYS in
+    # update_data.py) — give it more headroom than the plain yfinance pull
+    # needs.
+    timeout-minutes: 25
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -25,7 +30,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install --upgrade yfinance pandas
+        run: pip install --upgrade yfinance pandas numpy pyettj
 
       - name: Fetch 5-year daily data
         run: python update_data.py
